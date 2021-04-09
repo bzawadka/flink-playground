@@ -23,52 +23,66 @@ import org.apache.flink.api.common.typeinfo.Types
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction
 import org.apache.flink.util.Collector
-import org.apache.flink.walkthrough.common.entity.Alert
-import org.apache.flink.walkthrough.common.entity.Transaction
-import spendreport.FraudDetector.{LARGE_AMOUNT, SMALL_AMOUNT}
+import org.apache.flink.walkthrough.common.entity.{Alert, Transaction}
 
-/**
- * Skeleton code for implementing a fraud detector.
- */
 object FraudDetector {
   val SMALL_AMOUNT: Double = 1.00
   val LARGE_AMOUNT: Double = 500.00
-  val ONE_MINUTE: Long = 60 * 1000L
+  val DETECTION_PERIOD_IN_SECONDS: Long = 60 * 1000L
 }
 
 @SerialVersionUID(1L)
 class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
 
-  @transient private var lastTransactionState: ValueState[java.lang.Boolean] = _
+  @transient private var lastTransactionSuspiciousState: ValueState[java.lang.Boolean] = _
+  @transient private var timerState: ValueState[java.lang.Long] = _
 
   @throws[Exception]
   override def open(parameters: Configuration): Unit = {
     val flagDescriptor = new ValueStateDescriptor("flag", Types.BOOLEAN)
-    lastTransactionState = getRuntimeContext.getState(flagDescriptor)
+    lastTransactionSuspiciousState = getRuntimeContext.getState(flagDescriptor)
+
+    val timerDescriptor = new ValueStateDescriptor("timer-state", Types.LONG)
+    timerState = getRuntimeContext.getState(timerDescriptor)
   }
 
   @throws[Exception]
   def processElement(
                       transaction: Transaction,
                       context: KeyedProcessFunction[Long, Transaction, Alert]#Context,
-                      collector: Collector[Alert]): Unit = {
+                      out: Collector[Alert]): Unit = {
 
     // a large transaction is only fraudulent if the previous one was small. Remembering information across events requires state.
 
-    val lastTransactionWasSmall: Boolean = if (lastTransactionState.value == null) false else lastTransactionState.value()
+    val lastTransactionWasSmall: Boolean = if (lastTransactionSuspiciousState.value == null) false else lastTransactionSuspiciousState.value()
 
     if (lastTransactionWasSmall) {
-      if (transaction.getAmount > LARGE_AMOUNT) {
+      if (transaction.getAmount > FraudDetector.LARGE_AMOUNT) {
         val alert = new Alert
         alert.setId(transaction.getAccountId)
-        collector.collect(alert)
+        out.collect(alert)
       }
 
-      lastTransactionState.clear()
+      lastTransactionSuspiciousState.clear()
     }
 
-    if (transaction.getAmount < SMALL_AMOUNT) {
-      lastTransactionState.update(true)
+    if (transaction.getAmount < FraudDetector.SMALL_AMOUNT) {
+      lastTransactionSuspiciousState.update(true)
+
+      val timer = context.timerService.currentProcessingTime + FraudDetector.DETECTION_PERIOD_IN_SECONDS
+      context.timerService.registerProcessingTimeTimer(timer)
+      timerState.update(timer)
     }
+  }
+
+  override def onTimer(
+                        timestamp: Long,
+                        context: KeyedProcessFunction[Long, Transaction, Alert]#OnTimerContext,
+                        out: Collector[Alert]): Unit = {
+    val timer = timerState.value
+    context.timerService.deleteProcessingTimeTimer(timer)
+
+    timerState.clear()
+    lastTransactionSuspiciousState.clear()
   }
 }
