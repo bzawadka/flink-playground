@@ -80,7 +80,7 @@ class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
                         context: KeyedProcessFunction[Long, Transaction, Alert]#OnTimerContext,
                         out: Collector[Alert]): Unit = {
     val timer = timerState.value
-    context.timerService.deleteProcessingTimeTimer(timer)
+    if (timer != null) context.timerService.deleteProcessingTimeTimer(timer)
 
     timerState.clear()
     lastTransactionSuspiciousState.clear()
