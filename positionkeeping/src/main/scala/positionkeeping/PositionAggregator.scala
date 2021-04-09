@@ -21,28 +21,26 @@ package positionkeeping
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction
 import org.apache.flink.util.Collector
 import org.apache.flink.walkthrough.common.entity.Alert
-import org.apache.flink.walkthrough.common.entity.Transaction
+import positionkeeping.input.Currency.Currency
+import positionkeeping.input.TradeEvent
 
-/**
-  * Skeleton code for implementing a fraud detector.
-  */
-object FraudDetector {
+object PositionAggregator {
   val SMALL_AMOUNT: Double = 1.00
   val LARGE_AMOUNT: Double = 500.00
   val ONE_MINUTE: Long     = 60 * 1000L
 }
 
 @SerialVersionUID(1L)
-class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
+class PositionAggregator extends KeyedProcessFunction[Currency, TradeEvent, Alert] {
 
   @throws[Exception]
   def processElement(
-      transaction: Transaction,
-      context: KeyedProcessFunction[Long, Transaction, Alert]#Context,
+      transaction: TradeEvent,
+      context: KeyedProcessFunction[Currency, TradeEvent, Alert]#Context,
       collector: Collector[Alert]): Unit = {
 
     val alert = new Alert
-    alert.setId(transaction.getAccountId)
+    alert.setId(transaction.dealtCurrencyAmount.toLong)
 
     collector.collect(alert)
   }

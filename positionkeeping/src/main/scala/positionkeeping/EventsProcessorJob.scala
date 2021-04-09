@@ -18,34 +18,38 @@
 
 package positionkeeping
 
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.scala._
-import org.apache.flink.walkthrough.common.sink.AlertSink
 import org.apache.flink.walkthrough.common.entity.Alert
-import org.apache.flink.walkthrough.common.entity.Transaction
-import org.apache.flink.walkthrough.common.source.TransactionSource
+import org.apache.flink.walkthrough.common.sink.AlertSink
+import positionkeeping.input.{TradeEvent, TradeEventSource}
 
-/**
-  * Skeleton code for the DataStream code walkthrough
-  */
-object FraudDetectionJob {
+object EventsProcessorJob {
 
   @throws[Exception]
   def main(args: Array[String]): Unit = {
-    val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+    val conf = new Configuration()
+    val env: StreamExecutionEnvironment = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(conf)
 
-    val transactions: DataStream[Transaction] = env
-      .addSource(new TransactionSource)
-      .name("transactions")
+    val events: DataStream[TradeEvent] = env
+      .addSource(new TradeEventSource)
+      .name("events")
 
-    val alerts: DataStream[Alert] = transactions
-      .keyBy(transaction => transaction.getAccountId)
-      .process(new FraudDetector)
-      .name("fraud-detector")
+    val positionUpdates: DataStream[Alert] = events
+      .keyBy(transaction => transaction.dealtCurrency)
+      .process(new PositionAggregator)
+      .name("position-aggregator")
 
-    alerts
+    positionUpdates
       .addSink(new AlertSink)
-      .name("send-alerts")
+      .name("risk-sink")
 
-    env.execute("Fraud Detection")
+    env.execute("Events processor")
+
+    // SOURCE: trade event
+    // SINK: position message to risk system
+
+    // SINK: an aggregate or a transformation to somewhere
+    // API: expose queryable state
   }
 }
