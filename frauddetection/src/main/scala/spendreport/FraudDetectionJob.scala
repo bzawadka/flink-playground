@@ -18,6 +18,7 @@
 
 package spendreport
 
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.scala._
 import org.apache.flink.walkthrough.common.entity.{Alert, Transaction}
 import org.apache.flink.walkthrough.common.sink.AlertSink
@@ -30,7 +31,8 @@ object FraudDetectionJob {
 
   @throws[Exception]
   def main(args: Array[String]): Unit = {
-    val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+    val conf = new Configuration()
+    val env: StreamExecutionEnvironment = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(conf)
 
     val transactions: DataStream[Transaction] = env
       .addSource(new TransactionSource)
