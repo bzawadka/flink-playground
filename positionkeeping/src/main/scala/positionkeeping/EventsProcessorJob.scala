@@ -28,8 +28,7 @@ object EventsProcessorJob {
 
   @throws[Exception]
   def main(args: Array[String]): Unit = {
-    val conf = new Configuration()
-    val env: StreamExecutionEnvironment = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(conf)
+    val env: StreamExecutionEnvironment = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(new Configuration())
 
     val events: DataStream[TradeEvent] = env
       .addSource(new TradeEventSource)

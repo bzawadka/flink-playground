@@ -18,30 +18,55 @@
 
 package positionkeeping
 
+import org.apache.flink.api.common.state.{ValueState, ValueStateDescriptor}
+import org.apache.flink.api.scala.typeutils.Types
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction
 import org.apache.flink.util.Collector
 import org.apache.flink.walkthrough.common.entity.Alert
 import positionkeeping.input.Currency.Currency
-import positionkeeping.input.TradeEvent
-
-object PositionAggregator {
-  val SMALL_AMOUNT: Double = 1.00
-  val LARGE_AMOUNT: Double = 500.00
-  val ONE_MINUTE: Long     = 60 * 1000L
-}
+import positionkeeping.input.{Side, TradeEvent}
 
 @SerialVersionUID(1L)
 class PositionAggregator extends KeyedProcessFunction[Currency, TradeEvent, Alert] {
 
+  @transient private var balance: ValueState[java.lang.Double] = _
+
+  @throws[Exception]
+  override def open(parameters: Configuration): Unit = {
+    val balanceDescriptor = new ValueStateDescriptor("balance", Types.DOUBLE)
+    balance = getRuntimeContext.getState(balanceDescriptor)
+  }
+
   @throws[Exception]
   def processElement(
-      transaction: TradeEvent,
-      context: KeyedProcessFunction[Currency, TradeEvent, Alert]#Context,
-      collector: Collector[Alert]): Unit = {
+                      event: TradeEvent,
+                      context: KeyedProcessFunction[Currency, TradeEvent, Alert]#Context,
+                      collector: Collector[Alert]): Unit = {
 
-    val alert = new Alert
-    alert.setId(transaction.dealtCurrencyAmount.toLong)
+    val currentCurrency = context.getCurrentKey
 
-    collector.collect(alert)
+    val amountToAddOrSubtract = currentCurrency match {
+      case event.dealtCurrency => event.tradeSide match {
+        case Side.BUY => event.dealtCurrencyAmount
+        case Side.SELL => -event.dealtCurrencyAmount
+      }
+      case event.counterCurrency => event.tradeSide match {
+        case Side.BUY => event.counterCurrencyAmount
+        case Side.SELL => -event.counterCurrencyAmount
+      }
+      case _ => 0
+    }
+
+    if (amountToAddOrSubtract > 0) {
+      val previousBalance: Double = if (balance.value == null) 0 else balance.value
+      val newBalance = amountToAddOrSubtract + previousBalance
+      balance.update(newBalance)
+
+      val alert = new Alert
+      alert.setId(newBalance.longValue)
+//      alert.setId(event.dealtCurrencyAmount.toLong)
+      collector.collect(alert)
+    }
   }
 }
