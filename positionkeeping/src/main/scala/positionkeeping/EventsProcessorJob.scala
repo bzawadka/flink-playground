@@ -20,9 +20,8 @@ package positionkeeping
 
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.scala._
-import org.apache.flink.walkthrough.common.entity.Alert
-import org.apache.flink.walkthrough.common.sink.AlertSink
 import positionkeeping.input.{TradeEvent, TradeEventSource}
+import positionkeeping.output.{PositionUpdate, PositionUpdateSink}
 
 object EventsProcessorJob {
 
@@ -32,23 +31,17 @@ object EventsProcessorJob {
 
     val events: DataStream[TradeEvent] = env
       .addSource(new TradeEventSource)
-      .name("events")
+      .name("events-source")
 
-    val positionUpdates: DataStream[Alert] = events
-      .keyBy(transaction => transaction.dealtCurrency)
+    val positionUpdates: DataStream[PositionUpdate] = events
+      .keyBy(event => event.dealtCurrency)
       .process(new PositionAggregator)
       .name("position-aggregator")
 
     positionUpdates
-      .addSink(new AlertSink)
+      .addSink(new PositionUpdateSink)
       .name("risk-sink")
 
     env.execute("Events processor")
-
-    // SOURCE: trade event
-    // SINK: position message to risk system
-
-    // SINK: an aggregate or a transformation to somewhere
-    // API: expose queryable state
   }
 }

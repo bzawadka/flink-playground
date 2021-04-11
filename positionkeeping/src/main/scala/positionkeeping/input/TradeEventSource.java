@@ -33,7 +33,7 @@ public class TradeEventSource extends FromIteratorFunction<TradeEvent> {
         @Override
         public T next() {
             try {
-                Thread.sleep(100);
+                Thread.sleep(500);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
